@@ -1,57 +1,110 @@
-# Panduan Operasional Burp Suite: Intersepsi dan Analisis Trafik
+# Dokumentasi Hasil Praktikum: Eksplorasi Protokol HTTP via Wireshark
 
-Dokumentasi ini merincikan prosedur standar dalam melakukan intersepsi trafik menggunakan Burp Suite untuk keperluan analisis keamanan aplikasi web.
+## 3.2 Analisis Transmisi Data HTTP GET/Response
 
----
-
-## 1. Inisialisasi Proyek (Startup)
-
-Tahap awal melibatkan pembukaan aplikasi serta penentuan basis proyek yang akan dikerjakan.
-
-* Pilih opsi **Temporary project** (pilihan standar pada versi Community). Klik **Next**.
-
-* Gunakan **Use Burp defaults** untuk menerapkan konfigurasi standar sistem. Klik **Start Burp**.
+Pada bagian ini, dilakukan observasi terhadap mekanisme komunikasi antara entitas pengirim (*client*) dan penerima (*server*) saat memproses permintaan dokumen web sederhana.
 
 ---
 
-## 2. Aktivasi Browser Internal
+### Tahapan Pengamatan
 
-Burp Suite telah dilengkapi dengan browser bawaan yang terintegrasi secara otomatis dengan pengaturan proxy.
-
-* Navigasikan ke tab **Proxy** > **Intercept**. Pastikan fitur **Intercept is on** dalam kondisi aktif, lalu pilih **Open Browser**.
-
----
-
-## 3. Proses Intersepsi Request
-
-Prosedur penangkapan data digital yang dikirimkan dari sisi klien (browser) menuju server target.
-
-* Masukkan URL sasaran pada browser internal agar Burp dapat menangkap request tersebut. Gunakan opsi **Forward** untuk meneruskan data secara bertahap, atau **Drop** untuk membatalkan transmisi.
-
-* Jika ingin trafik berjalan tanpa penahanan manual (alir lancar), nonaktifkan fitur dengan mengubah status tombol hingga menjadi **Intercept is off**.
+1. **Penyaringan Paket:** Setelah aplikasi Wireshark dijalankan, protokol HTTP diisolasi menggunakan fitur filter untuk mempermudah pemantauan trafik yang relevan.
+2. **Eksekusi Penangkapan Data:** Proses pengumpulan paket dimulai bersamaan dengan pengaksesan laman target pada browser:
+   `http://gaia.cs.umass.edu/wireshark-labs/HTTP-wireshark-file1.html`
+3. **Penyelesaian Sesi:** Setelah konten HTML berhasil dimuat sepenuhnya di layar browser, aktivitas perekaman trafik dihentikan.
 
 ---
 
-## 4. Evaluasi Riwayat HTTP
+### Temuan Analisis
 
-Meninjau rekaman seluruh aktivitas data yang telah melewati jalur proxy selama sesi berlangsung.
+Berdasarkan data yang berhasil direkam, parameter komunikasi yang terdeteksi adalah:
 
-* Pindah ke sub-tab **HTTP history**. Di panel ini, Anda dapat memantau daftar URL, metode permintaan (GET/POST), serta kode status HTTP.
+* **Tipe Instruksi:** HTTP GET
+* **Status Pengiriman:** 200 OK (Berhasil)
+* **Titik Asal (Client):** Alamat IP lokal perangkat mahasiswa.
+* **Titik Tujuan (Server):** 128.119.245.12
 
-* **Detail:** Pilih salah satu baris riwayat untuk meninjau detail **Request** (data keluar) dan **Response** (umpan balik server) pada panel bagian bawah.
-
----
-
-## 5. Manipulasi dan Pengiriman Ulang (Repeater)
-
-Memanfaatkan modul Repeater untuk memodifikasi parameter dan mengeksekusi ulang permintaan tanpa perlu mengisi formulir browser berulang kali.
-
-* Klik kanan pada entri di HTTP history, pilih **Send to Repeater**, lalu beralihlah ke tab **Repeater**.
-
-* Di tab Repeater, Anda dapat melakukan modifikasi pada isi Request secara manual. Klik **Send** untuk mengeksekusi permintaan tersebut.
-
-* **Hasil:** Output dari modifikasi akan langsung muncul di panel **Response**. Fitur ini sangat krusial dalam mengidentifikasi kerentanan keamanan seperti SQL Injection atau IDOR.
+**Kesimpulan:**
+Eksperimen ini memberikan gambaran nyata mengenai siklus permintaan-jawaban di layer aplikasi, di mana server merespons instruksi spesifik dari client dengan mengirimkan data yang diminta secara akurat.
 
 ---
 
-> **Catatan:** Selalu pastikan Anda memiliki otoritas legal dan izin resmi sebelum melakukan pengujian keamanan pada domain atau aplikasi tertentu.
+## 3.2.1 Mekanisme Efisiensi Bandwidth (Conditional GET)
+
+Eksperimen kedua bertujuan untuk membedah bagaimana browser mengoptimalkan penggunaan jaringan melalui sistem *caching*.
+
+---
+
+### Prosedur Uji Coba
+
+* **Inisialisasi:** Semua data *cache* pada browser dihapus untuk menjamin pengunduhan data baru dari server pada akses pertama.
+* **Interaksi Pertama:** Mengakses URL `HTTP-wireshark-file2.html` untuk menyimpan salinan dokumen di memori lokal.
+* **Interaksi Kedua (Refresh):** Melakukan pemuatan ulang halaman guna memicu browser mengirimkan pertanyaan "apakah data sudah berubah?".
+* **Monitoring:** Lalu lintas data dipantau untuk melihat perbedaan respon server antara akses pertama dan kedua.
+
+---
+
+### Hasil Observasi
+
+1. **Akses Awal:** Server memberikan status **200 OK** dan mengirimkan seluruh isi file karena browser belum memiliki salinan data tersebut.
+2. **Akses Berulang:** Browser menyertakan parameter `If-Modified-Since` pada *header* permintaannya. Karena konten tidak mengalami perubahan, server hanya memberikan respon singkat berupa **304 Not Modified**.
+
+**Kesimpulan:**
+Fitur **Conditional GET** terbukti sangat efektif untuk mereduksi beban jaringan. Dengan kode **304**, server tidak perlu mengirim ulang data yang identik, sehingga mempercepat performa pemuatan laman web.
+
+---
+
+## 3.3 Segmentasi Data pada Dokumen Berkapasitas Besar
+
+Bagian ini meneliti perilaku protokol saat menangani file yang ukurannya melampaui batas satu paket transmisi standar.
+
+---
+
+### Proses Eksperimen
+
+Dokumen "US Bill of Rights" diakses untuk memicu fragmentasi paket. Karena ukuran file melebihi nilai **Maximum Segment Size (MSS)**, data tidak dikirimkan dalam satu kesatuan utuh, melainkan dipecah menjadi beberapa bagian oleh protokol TCP di bawahnya.
+
+---
+
+### Analisis Segmentasi
+
+* **Fragmentasi TCP:** Terdeteksi adanya keterangan **"TCP segment of a reassembled PDU"**. Ini menunjukkan bahwa satu balasan HTTP sebenarnya terdiri dari beberapa potongan segmen TCP.
+* **Integrasi Data:** Wireshark secara otomatis menyatukan kembali (*reassemble*) potongan-potongan tersebut sehingga di level aplikasi tetap terbaca sebagai satu respon **200 OK**.
+
+**Kesimpulan:**
+Praktikum ini menunjukkan ketergantungan HTTP pada TCP untuk pengiriman data yang andal, di mana file besar didistribusikan melalui beberapa segmen demi menjaga stabilitas transmisi di jaringan.
+
+---
+
+## 3.4 Penanganan Objek Majemuk dalam Satu Halaman HTML
+
+Eksperimen ini fokus pada bagaimana satu alamat URL bisa memicu banyak proses pengunduhan sekaligus.
+
+---
+
+### Alur Kerja Browser
+
+Saat mengakses halaman yang berisi gambar (objek eksternal), browser melakukan langkah berikut:
+1. Mengambil struktur dasar melalui file HTML utama.
+2. Memindai konten HTML dan menemukan referensi objek gambar (`pearson.png` dan `8th_edition_cover.jpg`).
+3. Mengirimkan instruksi **GET** tambahan secara otomatis untuk tiap-tiap gambar tersebut.
+
+**Kesimpulan:**
+Satu halaman web modern sebenarnya terdiri dari kumpulan banyak permintaan terpisah. Browser berperan sebagai pengelola yang menyatukan seluruh komponen tersebut hingga menjadi tampilan yang utuh bagi pengguna.
+
+---
+
+## 3.5 Protokol Autentikasi dan Keamanan Akses
+
+Bagian akhir mengulas proses verifikasi identitas pengguna pada direktori web yang dikunci.
+
+---
+
+### Tahapan Pertukaran Pesan
+
+1. **Tahap Penolakan:** Pada upaya akses pertama, server mengirimkan kode **401 Unauthorized** sebagai instruksi agar browser memunculkan kolom login.
+2. **Tahap Verifikasi:** Setelah username dan password diinput, browser mengirimkan ulang permintaan dengan *header* **Authorization**.
+3. **Pemberian Izin:** Server melakukan validasi, dan jika sesuai, barulah kode **200 OK** beserta isi halaman dikirimkan.
+
+**Kesimpulan:**
+Metode *Basic Authentication* bekerja dengan cara menolak akses awal untuk memvalidasi identitas. Namun, karena data dikirim menggunakan pengkodean *Base64* tanpa enkripsi tambahan, metode ini sangat rentan terhadap penyadapan jika tidak dijalankan di atas protokol HTTPS.
